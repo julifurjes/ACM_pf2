@@ -1,0 +1,288 @@
+---
+title: "portfolio2"
+author: "Juli Furjes"
+date: "2024-02-22"
+output: pdf_document
+---
+
+```{r installing}
+pacman::p_load(tidyverse,
+               here,
+               posterior,
+               cmdstanr,
+               brms, 
+               tidybayes, 
+               loo)
+
+setwd("~/Documents/uni/advanced cognitive modeling/scripts")
+```
+
+
+```{r compiling model}
+# Compiling model
+portfolio2_model <- cmdstan_model("portfolio2.4.stan", cpp_options = list(stan_threads = TRUE), pedantic = TRUE)
+
+#portfolio2_model.fromFile$exe_file() # Show location of executable
+```
+```{r simulation}
+# Amount of trials
+trials <- 100
+
+# Create a function to introduce noise and rate
+RandomAgentNoise_f <- function(rate, noise) {
+  choice <- rbinom(1, 1, rate) # generating noiseless choices
+  if (rbinom(1, 1, noise) == 1) {
+    choice <- rbinom(1, 1, 0.5) # introducing noise
+  }
+  return(choice)
+}
+
+# Create a function that checks if choice was successful, with noise parameter
+WinLoseSuccess_f <- function(choice, hand, noise, win, lose) {
+  choice <- as.integer(choice)
+  hand <- as.integer(hand)
+  if (choice == hand) {
+    win <- win + 1
+    feedback <- 1
+  } else {
+    lose <- lose + 1
+    feedback <- 0
+  }
+  return(list(feedback = feedback, win = win, lose = lose))
+}
+
+# Create a function that generates the choices
+WinLoseResults_f <- function(trials, noise, rate) {
+  win <- 0
+  lose <- 0
+  feedback <- vector("list", trials)
+  choice <- numeric(trials)
+  hand <- numeric(trials)
+  for(i in 1:trials) {
+    hand[i] <- sample(c(0, 1))
+    if (i>=3) {
+      feedback1 <- as.integer(feedback[[i-1]])
+      feedback2 <- as.integer(feedback[[i-2]])
+      choice1 <- choice[i-1]
+      if (feedback1 == feedback2 & feedback1 == 1) {
+          if (runif(1) > noise) {
+            choice[i] <- abs(choice1 - 1) # If both of them were success, switch
+          } else {
+            choice[i] <- choice1 # Noise scenario
+          }
+        } else if (feedback1 == feedback2 & feedback1 == 0) {
+          if (runif(1) > noise) {
+            choice[i] <- choice1 # If both of them were fail, stay
+          } else {
+            choice[i] <- abs(choice1 - 1) # Noise scenario
+          }
+        } else { # If feedback changed
+          choice[i] <- RandomAgentNoise_f(rate, noise) # Randomly generate based on rate and noise
+        }
+    } else { # If it hasn't been 3 trials yet
+        choice[i] <- RandomAgentNoise_f(rate, noise) # Randomly generate based on rate and noise
+      }
+    results <- WinLoseSuccess_f(choice[i], hand[i], noise, win, lose)
+    feedback[[i]] <- results$feedback
+  }
+  return(list(choice = choice, feedback = feedback, hand = hand, win = win, lose = lose))
+}
+```
+
+```{r noise and rate}
+# Play around with noise and rate levels
+# Initialize empty tibble
+d <- tibble(trial = integer(), choice = double(), rate = double(), noise = double(), cumulativerate = double())
+
+# Initialize choice vector
+choices <- rep(NA, trials)
+
+for (noise in seq(0, 0.5, 0.1)) { # Looping through noise levels
+  for (rate in seq(0, 1, 0.1)) { # Looping through rate levels
+    
+    results <- WinLoseResults_f(trials, noise, rate)
+    choices <- results$choice
+      
+    temp <- tibble(trial = seq(trials), choice = choices, rate = rate, noise = noise)
+    temp$cumulativerate <- cumsum(temp$choice) / seq_along(temp$choice)
+
+    d <- rbind(d, temp)
+  }
+}
+
+p1 <- ggplot(d, aes(trial, cumulativerate, group = rate, color = rate)) + 
+  geom_line() + 
+  geom_hline(yintercept = 0.5, linetype = "dashed") + 
+  ylim(0,1) + 
+  facet_wrap(.~noise) + 
+  theme_classic()
+p1
+```
+
+```{r data}
+# Set up data
+
+# Generate list of choices
+noise <- 0.05
+rate <- 0.4
+outcome <- WinLoseResults_f(trials, noise, rate)
+
+# Generating successes
+success <- outcome$feedback
+
+# Generating hand
+hand <- outcome$hand
+
+# Generating choice
+choice <- outcome$choice
+
+# Defining noise
+noise <- 0.3
+
+# Create the data
+data <- list(
+  trials = trials,
+  success = success,
+  hand = hand,
+  choice = choice,
+  noise = noise
+)
+```
+
+```{r modeling, message=FALSE, warning=FALSE}
+samples <- portfolio2_model$sample(
+   data = data,
+   seed = 123,
+   chains = 2,
+   parallel_chains = 2,
+   threads_per_chain = 2,
+   iter_warmup = 2000,
+   iter_sampling = 2000,
+   refresh = 500,
+   max_treedepth = 20,
+   adapt_delta = 0.99,
+)
+```
+
+```{r summary}
+# Summary
+
+samples$summary()
+```
+
+```{r visualisations}
+# Visualisations for prior posterior updates
+
+# Extract posterior samples and include sampling of the prior:
+draws_df <- as_draws_df(samples$draws())
+
+# Now let's plot the density for theta (prior and posterior)
+ggplot(draws_df) +
+  geom_density(aes(rate), fill = "blue", alpha = 0.3) +
+  geom_density(aes(rate_prior), fill = "red", alpha = 0.3) +
+  geom_vline(xintercept = draws_df$rate[1]) +
+  xlab("Rate") +
+  ylab("Posterior Density") +
+  theme_classic()
+
+ggplot(draws_df) +
+  geom_density(aes(betaGamble), fill = "blue", alpha = 0.3) +
+  geom_density(aes(betaGamble_prior), fill = "red", alpha = 0.3) +
+  geom_vline(xintercept = draws_df$betaGamble[1]) +
+  xlab("Beta Gamble") +
+  ylab("Posterior Density") +
+  theme_classic()
+```
+
+```{r prior posterior prediction checks}
+print(draws_df)
+
+# Prior predictions
+ggplot(draws_df) +
+  geom_histogram(aes(prior_preds), color = "darkblue", fill = "blue", alpha = 0.3) +
+  xlab("Predicted heads out of 120 trials") +
+  ylab("Posterior Density") +
+  theme_classic()
+
+# Posterior predictions
+ggplot(draws_df) +
+  geom_histogram(aes(posterior_preds), color = "darkblue", fill = "blue", alpha = 0.3, bins = 90) +
+  geom_point(x = sum(data$choice), y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 120 trials") +
+  ylab("Posterior Density") +
+  theme_classic()
+```
+
+```{r model quality}
+# Model quality check
+
+samples$cmdstan_diagnose()
+
+ggplot(draws_df, aes(.iteration, rate, group = .chain, color = .chain)) +
+  geom_line() +
+  theme_classic()
+```
+
+```{r parameter recovery}
+# Parameter recovery
+
+# Now we need to scale it up to all possible rates and noises
+recovery_df <- NULL
+
+for (noiseLvl in unique(d$noise)) {
+  
+  for (rateLvl in unique(d$rate)) {
+    
+    dd <- d %>% subset(
+      noise == noiseLvl  & rate == rateLvl
+    )
+    
+  # Generate list of choices
+  outcome <- WinLoseResults_f(trials, noise, rate)
+  
+  # Create the data
+  data <- list(
+    trials = trials,
+    success = success,
+    hand = hand,
+    choice = choice,
+    noise = noise
+  )
+    
+    samples <- mod$sample(
+      data = data,
+      seed = 123,
+      chains = 1,
+      parallel_chains = 1,
+      threads_per_chain = 1,
+      iter_warmup = 1000,
+      iter_sampling = 2000,
+      refresh = 0,
+      max_treedepth = 20,
+      adapt_delta = 0.99,
+    )
+    
+    draws_df <- as_draws_df(samples$draws()) 
+    temp <- tibble(biasEst = inv_logit_scaled(draws_df$theta), 
+                   biasTrue = rateLvl, noise = noiseLvl)
+    
+    
+    if (exists("recovery_df")) {recovery_df <- rbind(recovery_df, temp)} else {recovery_df <- temp}
+    
+  }
+  
+}
+
+write_csv(recovery_df, "simdata/W3_recoverydf_simple.csv")
+```
+
+```{r visualising pr}
+recovery_df <- read_csv("simdata/W3_recoverydf_simple.csv")
+
+ggplot(recovery_df, aes(biasTrue, biasEst)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth() +
+  facet_wrap(.~noise) +
+  theme_classic()
+```
+
