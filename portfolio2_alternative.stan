@@ -17,9 +17,9 @@ transformed parameters {
       gamble[t] = 0; // Random probability of the outcome of 1
     } else if (t>=3) {
         if (choice[t-1] == choice[t-2] && success[t-1] == 1 && success[t-2] == 1) { // If won twice
-    	    gamble[t] = 1;
+    	    gamble[t] = (-1+choice[t-1]*2);
         } else if (choice[t-1] == choice[t-2] && success[t-1] == 0 && success[t-2] == 0) { // If lost twice
-            gamble[t] = 1;
+            gamble[t] = (-1+choice[t-1]*2);
         } else { // If there was no consecutive pattern
             gamble[t] = 0; // Random probability of the outcome of 1
         }
@@ -32,6 +32,9 @@ model {
   for (t in 1:trials) {
     target += normal_lpdf(betaGamble | 0, 0.3);
     target += normal_lpdf(rate | 0.5, 0.3);
+    // we need a term that only activates betaGamble, when gamble[t] == 1. Also, we need a term that makes betaGamble affect rate positively, if previous choice was 1, or negatively if previous choice was 0
+    // -1*gamble+choice*2
+    //target += bernoulli_logit_lpmf(choice[t] | rate + betaGamble*);
     target += bernoulli_logit_lpmf(choice[t] | rate + betaGamble*gamble[t]);
     //target += bernoulli_logit_lpmf(choice[t] | log(betaGamble[t]*Gamble[t]) - log(1 - betaGamble[t]) + log(rate));
   }
