@@ -17,7 +17,7 @@ transformed parameters {
       gamble[t] = 0; // Random probability of the outcome of 1
     } else if (t>=3) {
         if (choice[t-1] == choice[t-2] && success[t-1] == 1 && success[t-2] == 1) { // If won twice
-    	    gamble[t] = (-1+choice[t-1]*2);
+    	    gamble[t] = (1-2*choice[t-1]);
         } else if (choice[t-1] == choice[t-2] && success[t-1] == 0 && success[t-2] == 0) { // If lost twice
             gamble[t] = (-1+choice[t-1]*2);
         } else { // If there was no consecutive pattern
