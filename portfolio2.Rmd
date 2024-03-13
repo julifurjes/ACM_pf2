@@ -38,43 +38,36 @@ RandomAgentNoise_f <- function(rate, noise) {
 }
 
 # Create a function that checks if choice was successful, with noise parameter
-WinLoseSuccess_f <- function(choice, hand, noise, win, lose) {
+WinLoseSuccess_f <- function(choice, hand) {
   choice <- as.integer(choice)
   hand <- as.integer(hand)
   if (choice == hand) {
-    win <- win + 1
     feedback <- 1
   } else {
-    lose <- lose + 1
     feedback <- 0
   }
-  return(list(feedback = feedback, win = win, lose = lose))
+  return(feedback)
 }
 
 # Create a function that generates the choices
 WinLoseResults_f <- function(trials, noise, rate) {
-  win <- 0
-  lose <- 0
-  feedback <- vector("list", trials)
+  feedback <- numeric(trials)
   choice <- numeric(trials)
   hand <- numeric(trials)
   for(i in 1:trials) {
-    hand[i] <- sample(c(0, 1), 1, prob = c(0.5,0.5))
+    hand[i] <- rbinom(1, 1, 0.5)
     if (i>=3) {
-      feedback1 <- as.integer(feedback[[i-1]])
-      feedback2 <- as.integer(feedback[[i-2]])
-      choice1 <- choice[i-1]
-      if (feedback1 == feedback2 & feedback1 == 1) {
-          if (runif(1) > noise) {
-            choice[i] <- abs(choice1 - 1) # If both of them were success, switch
+      if (choice[i-1] == choice[i-2] & feedback[i-1] == 1 & feedback[i-2] == 1) {
+          if (rbinom(1, 1, noise) == 0) {
+            choice[i] <- abs(choice[i-1] - 1) # If both of them were success, switch
           } else {
-            choice[i] <- choice1 # Noise scenario
+            choice[i] <- choice[i-1] # Noise scenario
           }
-        } else if (feedback1 == feedback2 & feedback1 == 0) {
-          if (runif(1) > noise) {
-            choice[i] <- choice1 # If both of them were fail, stay
+        } else if (choice[i-1] == choice[i-2] & feedback[i-1] == 0 & feedback[i-2] == 0) {
+          if (rbinom(1, 1, noise) == 0) {
+            choice[i] <- choice[i-1] # If both of them were fail, stay
           } else {
-            choice[i] <- abs(choice1 - 1) # Noise scenario
+            choice[i] <- abs(choice[i-1] - 1) # Noise scenario
           }
         } else { # If feedback changed
           choice[i] <- RandomAgentNoise_f(rate, noise) # Randomly generate based on rate and noise
@@ -82,10 +75,9 @@ WinLoseResults_f <- function(trials, noise, rate) {
     } else { # If it hasn't been 3 trials yet
         choice[i] <- RandomAgentNoise_f(rate, noise) # Randomly generate based on rate and noise
       }
-    results <- WinLoseSuccess_f(choice[i], hand[i], noise, win, lose)
-    feedback[[i]] <- results$feedback
+    feedback[i] <- WinLoseSuccess_f(choice[i], hand[i])
   }
-  return(list(choice = choice, feedback = feedback, hand = hand, win = win, lose = lose))
+  return(list(choice = choice, feedback = feedback, hand = hand))
 }
 ```
 
@@ -101,9 +93,8 @@ for (noise in seq(0, 0.5, 0.1)) { # Looping through noise levels
   for (rate in seq(0, 1, 0.1)) { # Looping through rate levels
     
     results <- WinLoseResults_f(trials, noise, rate)
-    choices <- results$choice
       
-    temp <- tibble(trial = seq(trials), choice = choices, rate = rate, noise = noise)
+    temp <- tibble(trial = seq(trials), choice = results$choice, rate = rate, noise = noise)
     temp$cumulativerate <- cumsum(temp$choice) / seq_along(temp$choice)
 
     d <- rbind(d, temp)
@@ -127,25 +118,12 @@ noise <- 0.05
 rate <- 0.4
 outcome <- WinLoseResults_f(trials, noise, rate)
 
-# Generating successes
-success <- outcome$feedback
-
-# Generating hand
-hand <- outcome$hand
-
-# Generating choice
-choice <- outcome$choice
-
-# Defining noise
-noise <- 0.3
-
 # Create the data
 data <- list(
   trials = trials,
-  success = success,
-  hand = hand,
-  choice = choice,
-  noise = noise
+  success =  outcome$feedback,
+  hand = outcome$hand,
+  choice = outcome$choice
 )
 ```
 
@@ -197,13 +175,13 @@ ggplot(draws_df) +
 ```{r prior posterior prediction checks}
 print(draws_df)
 
-prior_preds <- rep(0, trials)
+prior_preds <- numeric(trials)
 
 for (i in 1:trials){
   prior_preds[i] <- mean(draws_df[[125+i]])
 }
 
-posterior_preds <- rep(0, trials)
+posterior_preds <- numeric(trials)
 
 for (i in 1:trials){
   posterior_preds[i] <- mean(draws_df[[245+i]])
@@ -212,7 +190,7 @@ for (i in 1:trials){
 # Prior predictions
 ggplot() +
   geom_histogram(aes(prior_preds), color = "darkblue", fill = "blue", alpha = 0.3) +
-  xlab("Predicted heads out of 120 trials") +
+  xlab("The predicted proportion of choosing the right hand out of 120 trials") +
   ylab("Posterior Density") +
   theme_classic()
 
@@ -221,7 +199,7 @@ ggplot() +
   geom_histogram(aes(posterior_preds), color = "darkblue", fill = "blue", alpha = 0.3) +
   #geom_vline(x = mean(data$choice)) +
   # #geom_point(x = mean(data$choice), y = 0, color = "red", shape = 17, size = 5) +
-  xlab("Predicted heads out of 120 trials") +
+  xlab("The predicted proportion of choosing the right hand out of 120 trials") +
   ylab("Posterior Density") +
   theme_classic()
 ```
@@ -245,22 +223,16 @@ recovery_df <- NULL
 for (noiseLvl in unique(d$noise)) {
   
   for (rateLvl in unique(d$rate)) {
-    
-    dd <- d %>% subset(
-      noise == noiseLvl  & rate == rateLvl
-    )
-    
-  # Generate list of choices
-  outcome <- WinLoseResults_f(trials, noise, rate)
+    # Generate list of choices
+    outcome <- WinLoseResults_f(trials, noiseLvl, rateLvl)
   
-  # Create the data
-  data <- list(
-    trials = trials,
-    success = success,
-    hand = hand,
-    choice = choice,
-    noise = noise
-  )
+    # Create data for model
+    data <- list(
+      trials = trials,
+      success = outcome$feedback,
+      hand = outcome$hand,
+      choice = outcome$choice
+    )
     
     samples <- portfolio2_model$sample(
       data = data,
