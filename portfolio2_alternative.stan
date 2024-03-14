@@ -1,6 +1,6 @@
 data {
   int<lower = 1> trials; // Number of trials
-  array[trials] int hand; // Observed hand choice outcomes (0 or 1)
+  // array[trials] int hand; // Observed hand choice outcomes (0 or 1)
   array[trials] int success; // Success of each trial (1 for success, 0 for failure)
   array[trials] int choice; // Choice made each trial
 }
@@ -11,7 +11,7 @@ parameters {
 }
 
 transformed parameters {
-  array[trials] real gamble;
+  vector[trials] gamble;
   for (t in 1:trials) {
     if (t == 1 || t == 2) { // If trial nr is not high enough yet for our model
       gamble[t] = 0; // Random probability of the outcome of 1
@@ -29,15 +29,19 @@ transformed parameters {
 
 model {
   // Likelihood for choice
-  for (t in 1:trials) {
-    target += normal_lpdf(betaGamble | 0, 0.3);
-    target += normal_lpdf(rate | 0.5, 0.3);
-    // we need a term that only activates betaGamble, when gamble[t] == 1. Also, we need a term that makes betaGamble affect rate positively, if previous choice was 1, or negatively if previous choice was 0
-    // -1*gamble+choice*2
-    //target += bernoulli_logit_lpmf(choice[t] | rate + betaGamble*);
-    target += bernoulli_logit_lpmf(choice[t] | rate + betaGamble*gamble[t]);
-    //target += bernoulli_logit_lpmf(choice[t] | log(betaGamble[t]*Gamble[t]) - log(1 - betaGamble[t]) + log(rate));
-  }
+  // for (t in 1:trials) {
+  //   // target += normal_lpdf(betaGamble | 0, 0.3);
+  //   target += normal_lpdf(rate | 0.5, 0.3);
+  //   // we need a term that only activates betaGamble, when gamble[t] == 1. Also, we need a term that makes betaGamble affect rate positively, if previous choice was 1, or negatively if previous choice was 0
+  //   // -1*gamble+choice*2
+  //   target += bernoulli_logit_lpmf(choice[t] | rate);
+  //   // target += bernoulli_logit_lpmf(choice[t] | rate + betaGamble*gamble[t]);
+  //   //target += bernoulli_logit_lpmf(choice[t] | log(betaGamble[t]*Gamble[t]) - log(1 - betaGamble[t]) + log(rate));
+  // }
+  target += normal_lpdf(betaGamble | 0, 0.3);
+  target += normal_lpdf(rate | 0.5, 0.3);
+  target += bernoulli_logit_lpmf(choice | rate + betaGamble*gamble);
+  
 }
 
 generated quantities {
@@ -52,5 +56,7 @@ generated quantities {
   for (t in 1:trials) {
     prior_preds[t] = bernoulli_rng(inv_logit(rate_prior + betaGamble_prior*gamble[t]));
     posterior_preds[t] = bernoulli_rng(inv_logit(rate + betaGamble*gamble[t]));
+    // prior_preds[t] = bernoulli_rng(inv_logit(rate_prior));
+    // posterior_preds[t] = bernoulli_rng(inv_logit(rate));
   }
 }

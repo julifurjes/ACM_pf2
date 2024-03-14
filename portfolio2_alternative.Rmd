@@ -29,7 +29,7 @@ trials <- 120
 
 # Create a function to introduce noise and rate
 RandomAgentNoise_f <- function(rate, noise) {
-  choice <- rbinom(1, 1, rate) # generating noiseless choices
+  choice <- rbinom(1, 1, inv_logit_scaled(rate)) # generating noiseless choices
   if (rbinom(1, 1, noise) == 1) {
     choice <- rbinom(1, 1, 0.5) # introducing noise
   }
@@ -85,16 +85,16 @@ WinLoseResults_model_f <- function(trials, noise, rate, betagamble) {
   choice <- numeric(trials)
   hand <- numeric(trials)
   gamble <- numeric(trials)
-  logit_rate <- logit_scaled(rate)
+  # logit_rate <- logit_scaled(rate)
   for(i in 1:trials) {
     hand[i] <- rbinom(1, 1, 0.5)
     if (i>=3) {
       if (choice[i-1] == choice[i-2] & feedback[i-1] == 1 & feedback[i-2] == 1) {
           gamble[i] <- (1-2*choice[i-1])
-          choice[i] <- rbinom(1,1,inv_logit_scaled(logit_rate+betagamble*gamble[i])) # If both of them were success, switch
+          choice[i] <- rbinom(1,1,inv_logit_scaled(rate+betagamble*gamble[i])) # If both of them were success, switch
         } else if (choice[i-1] == choice[i-2] & feedback[i-1] == 0 & feedback[i-2] == 0) {
           gamble[i] <- (-1+2*choice[i-1])
-          choice[i] <- rbinom(1,1,inv_logit_scaled(logit_rate+betagamble*gamble[i])) # If both of them were fail, stay
+          choice[i] <- rbinom(1,1,inv_logit_scaled(rate+betagamble*gamble[i])) # If both of them were fail, stay
         } else { # If feedback changed
           choice[i] <- RandomAgentNoise_f(rate, noise) # Randomly generate based on rate and noise
         }
@@ -116,7 +116,7 @@ d <- tibble(trial = integer(), choice = double(), rate = double(), noise = doubl
 choices <- rep(NA, trials)
 
 for (noise in seq(0, 0.5, 0.1)) { # Looping through noise levels
-  for (rate in seq(0, 1, 0.1)) { # Looping through rate levels
+  for (rate in seq(-2, 2, 0.2)) { # Looping through rate levels
     for (beta_g in c(-10,-5,-1,-0.5,0,0.5,1,5,10)) {
       results <- WinLoseResults_model_f(trials, noise, rate, beta_g)
       # results <- WinLoseResults_f(trials, noise, rate)
@@ -151,16 +151,16 @@ p1
 # Set up data
 
 # Generate list of choices
-noise <- 0.05
-rate <- 0.4
-betagamble <- 10
+noise <- 0
+rate <- 1
+betagamble <- -1.5
 outcome <- WinLoseResults_model_f(trials, noise, rate, betagamble)
 
 # Create the data
 data <- list(
   trials = trials,
   success =  outcome$feedback,
-  hand = outcome$hand,
+  # hand = outcome$hand,
   choice = outcome$choice
 )
 ```
@@ -180,6 +180,7 @@ samples <- portfolio2_model$sample(
 )
 ```
 
+
 ```{r summary}
 # Summary
 
@@ -194,17 +195,33 @@ draws_df <- as_draws_df(samples$draws())
 
 # Now let's plot the density for theta (prior and posterior)
 ggplot(draws_df) +
+  geom_density(aes(inv_logit_scaled(rate)), fill = "blue", alpha = 0.3) +
+  geom_density(aes(inv_logit_scaled(rate_prior)), fill = "red", alpha = 0.3) +
+  geom_vline(xintercept = inv_logit_scaled(rate)) +
+  xlab("Rate") +
+  ylab("Posterior Density") +
+  theme_classic()
+
+ggplot(draws_df) +
   geom_density(aes(rate), fill = "blue", alpha = 0.3) +
   geom_density(aes(rate_prior), fill = "red", alpha = 0.3) +
-  geom_vline(xintercept = draws_df$rate[1]) +
+  geom_vline(xintercept = rate) +
   xlab("Rate") +
+  ylab("Posterior Density") +
+  theme_classic()
+
+ggplot(draws_df) +
+  geom_density(aes(inv_logit_scaled(betaGamble)), fill = "blue", alpha = 0.3) +
+  geom_density(aes(inv_logit_scaled(betaGamble_prior)), fill = "red", alpha = 0.3) +
+  geom_vline(xintercept = inv_logit_scaled(betagamble)) +
+  xlab("Beta Gamble") +
   ylab("Posterior Density") +
   theme_classic()
 
 ggplot(draws_df) +
   geom_density(aes(betaGamble), fill = "blue", alpha = 0.3) +
   geom_density(aes(betaGamble_prior), fill = "red", alpha = 0.3) +
-  geom_vline(xintercept = draws_df$betaGamble[1]) +
+  geom_vline(xintercept = betagamble) +
   xlab("Beta Gamble") +
   ylab("Posterior Density") +
   theme_classic()
