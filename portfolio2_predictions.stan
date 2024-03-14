@@ -48,3 +48,21 @@ generated quantities {
     posterior_preds[t] = bernoulli_rng(inv_logit(rate + betaGamble*gamble[t]));
   }
 }
+
+// generated quantities{
+//   real<lower=0, upper=1> rate_prior;  // theta prior parameter, on a prob scale (0-1)
+//   real<lower=0, upper=1> rate_posterior; // theta posterior parameter, on a prob scale (0-1)
+//   real<lower=0, upper=1> betaGamble_prior;  // theta prior parameter, on a prob scale (0-1)
+//   real<lower=0, upper=1> betaGamble_posterior; // theta posterior parameter, on a prob scale (0-1)
+//   real<lower=-1, upper=1> gamble_mean;
+//   int<lower=0, upper=trials> prior_preds;  // distribution of right hand choices according to the prior
+//   int<lower=0, upper=trials> posterior_preds; // distribution of right hand choices according to the posterior
+//   
+//   rate_prior = normal_rng(0,1); // generating the prior on a log odds scale and converting
+//   rate_posterior = inv_logit(rate);  // converting the posterior estimate from log odds to prob.
+//   betaGamble_prior = normal_rng(0,1); // generating the prior on a log odds scale and converting
+//   betaGamble_posterior = inv_logit(betaGamble);  // converting the posterior estimate from log odds to prob.
+//   prior_preds = binomial_rng(trials, inv_logit(rate_prior));
+//   // gamble_mean = mean(gamble);
+//   posterior_preds = binomial_rng(trials, inv_logit(rate));
+// }
