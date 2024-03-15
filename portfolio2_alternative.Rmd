@@ -415,3 +415,103 @@ ggsave(filename = "figures/param_recov_betagamble_120.png", plot = param_recov_b
 ggsave(filename = "figures/param_recov_betagamble_1200.png", plot = param_recov_betag_1200)
 ```
 
+```{r}
+# Set up data
+trials <- 1200
+
+# Generate list of choices
+noise <- 0
+rate <- 1
+betagamble <- -1.5
+outcome <- WinLoseResults_model_f(trials, noise, rate, betagamble)
+
+# Create the data
+data <- list(
+  trials = trials,
+  success =  outcome$feedback,
+  # hand = outcome$hand,
+  choice = outcome$choice
+)
+
+samples <- portfolio2_model$sample(
+   data = data,
+   seed = 123,
+   chains = 2,
+   parallel_chains = 2,
+   threads_per_chain = 2,
+   iter_warmup = 2000,
+   iter_sampling = 2000,
+   refresh = 500,
+   max_treedepth = 20,
+   adapt_delta = 0.99,
+)
+
+# Visualisations for prior posterior updates
+
+# Now let's plot the density for theta (prior and posterior)
+prior_plot_1 <- ggplot(draws_df) +
+  geom_density(aes(inv_logit_scaled(rate)), fill = "blue", alpha = 0.3) +
+  geom_density(aes(inv_logit_scaled(rate_prior)), fill = "red", alpha = 0.3) +
+  geom_vline(xintercept = inv_logit_scaled(rate)) +
+  xlab("Rate (Probability Space)") +
+  ylab("Estimate Densities") +
+  theme_classic() +
+  labs(title = "Prior and Posterior Distrbution for Rate (1200 trials)", subtitle = "Black line indicates true value")
+
+prior_plot_2 <- ggplot(draws_df) +
+  geom_density(aes(rate), fill = "blue", alpha = 0.3) +
+  geom_density(aes(rate_prior), fill = "red", alpha = 0.3) +
+  geom_vline(xintercept = rate) +
+  xlab("Rate (Log space)") +
+  ylab("Estimate Densities") +
+  theme_classic() +
+  labs(title = "Prior and Posterior Distrbution for Rate (1200 trials)", subtitle = "Black line indicates true value")
+
+prior_plot_3 <- ggplot(draws_df) +
+  geom_density(aes(inv_logit_scaled(betaGamble)), fill = "blue", alpha = 0.3) +
+  geom_density(aes(inv_logit_scaled(betaGamble_prior)), fill = "red", alpha = 0.3) +
+  geom_vline(xintercept = inv_logit_scaled(betagamble)) +
+  xlab("Beta Gamble (Probability Space)") +
+  ylab("Estimate Densities") +
+  theme_classic() +
+  labs(title = "Prior and Posterior Distrbution for BetaGamble (1200 trials)", subtitle = "Black line indicates true value")
+
+prior_plot_4 <- ggplot(draws_df) +
+  geom_density(aes(betaGamble), fill = "blue", alpha = 0.3) +
+  geom_density(aes(betaGamble_prior), fill = "red", alpha = 0.3) +
+  geom_vline(xintercept = betagamble) +
+  xlab("Beta Gamble (Log space)") +
+  ylab("Estimate Densities") +
+  theme_classic() +
+  labs(title = "Prior and Posterior Distrbution for BetaGamble (1200 trials)", subtitle = "Black line indicates true value")
+
+# ggplot(draws_df) +
+#   geom_density(aes(rate_prior), fill = "blue", alpha = 0.3) +
+#   #geom_density(aes(betaGamble_prior), fill = "red", alpha = 0.3) +
+#   #geom_vline(xintercept = betagamble) +
+#   #xlab("Beta Gamble") +
+#   ylab("Posterior Density") +
+#   theme_classic() +
+#   lims(x = c(-2.5,2.5))
+# 
+# ggplot(draws_df) +
+#   geom_density(aes(betaGamble_prior), fill = "blue", alpha = 0.3) +
+#   #geom_density(aes(betaGamble_prior), fill = "red", alpha = 0.3) +
+#   #geom_vline(xintercept = betagamble) +
+#   #xlab("Beta Gamble") +
+#   ylab("Posterior Density") +
+#   theme_classic()  +
+#   lims(x = c(-2.5,2.5))
+
+prior_plot_1
+prior_plot_2
+prior_plot_3
+prior_plot_4
+
+ggsave(filename = "figures/prior_plot_rate_1200.png", plot = prior_plot_1)
+ggsave(filename = "figures/prior_plot_rate_log_1200.png", plot = prior_plot_2)
+ggsave(filename = "figures/prior_plot_betagamble_1200.png", plot = prior_plot_3)
+ggsave(filename = "figures/prior_plot_betagamble_log_1200.png", plot = prior_plot_4)
+
+```
+
