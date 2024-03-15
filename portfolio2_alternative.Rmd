@@ -234,11 +234,15 @@ print(draws_df)
 
 prior_preds <- numeric(trials)
 
+#prior_preds <- rowMeans(draws_df[,126:246])
+
 for (i in 1:trials){
   prior_preds[i] <- mean(draws_df[[125+i]])
 }
 
 posterior_preds <- numeric(trials)
+
+#posterior_preds <- rowMeans(draws_df[,246:366])
 
 for (i in 1:trials){
   posterior_preds[i] <- mean(draws_df[[245+i]])
